@@ -17,7 +17,7 @@ __global__ void matmul_kernel(const T *a, const T *b, T *c, int M, int N, int K)
   if (row < M && col < N) {
     c[row * N + col] = 0;
     for (int k = 0; k < K; ++k) {
-      c[row * N + col] += a[row * K + k] * b[k * N + col]; // each thread accesses global memory 2N times
+      c[row * N + col] += a[row * K + k] * b[k * N + col]; // mỗi thread truy cập global memory 2N lần
     }
   }
 }
@@ -30,8 +30,6 @@ __host__ void verifyResult(T *a, T *b, T *c, int M, int N, int K) {
       for (int k = 0; k < K; k++) {
         sum += a[i * K + k] * b[k * N + j];
       }
-      // Uncomment for detailed logging:
-      // printf("sum: %d, c[%d * N + %d]: %d\n", sum, i, j, c[i * N + j]);
       assert(c[i * N + j] == sum);
     }
   }
@@ -56,9 +54,10 @@ __host__ void copyFromHostToDevice(T *h_a, T *h_b, T *d_a, T *d_b, int M, int N,
 
 template<typename T>
 __host__ void executeKernel(T *d_a, T *d_b, T *d_c, int M, int N, int K) {
+  // block size: 32x32 threads
   int block_dim = 32;
   dim3 block(block_dim * block_dim);
-  dim3 grid((M + block_dim - 1) / block_dim, (N + block_dim - 1) / block_dim);
+  dim3 grid((N + block_dim - 1) / block_dim, (M + block_dim - 1) / block_dim);
   hipLaunchKernelGGL(matmul_kernel<T>, grid, block, 0, 0, d_a, d_b, d_c, M, N, K);
   hipDeviceSynchronize();
 
@@ -110,17 +109,15 @@ __host__ std::tuple<int, int, int> parseCmdLineArgs(int argc, char *argv[]) {
   int M = 1024;
   int N = 1024;
   int K = 1024;
-  for (int i = 1; i < argc; i++){
+  for (int i = 1; i < argc; i++) {
     std::string option(argv[i]);
     std::string value(argv[i+1]);
     i++;
     if (option.compare("-m") == 0) {
       M = std::stoi(value);
-    }
-    else if (option.compare("-n") == 0) {
+    } else if (option.compare("-n") == 0) {
       N = std::stoi(value);
-    }
-    else if (option.compare("-k") == 0) {
+    } else if (option.compare("-k") == 0) {
       K = std::stoi(value);
     }
   }
@@ -128,14 +125,17 @@ __host__ std::tuple<int, int, int> parseCmdLineArgs(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-  auto [M, N, K] = parseCmdLineArgs(argc, argv);
+  auto parsedCmdLineArgsTuple = parseCmdLineArgs(argc, argv);
+  int M = std::get<0>(parsedCmdLineArgsTuple);
+  int N = std::get<1>(parsedCmdLineArgsTuple);
+  int K = std::get<2>(parsedCmdLineArgsTuple);
 
-  // Allocate host memory
+  // Allocate memory on host
   int *h_a = (int *)malloc(M * K * sizeof(int));
   int *h_b = (int *)malloc(K * N * sizeof(int));
   int *h_c = (int *)malloc(M * N * sizeof(int));
 
-  // Initialize matrices with random numbers
+  // Initialize matrices
   for (size_t i = 0; i < M; i++) {
     for (size_t j = 0; j < K; j++) {
       h_a[i * K + j] = rand() % 10;
@@ -147,7 +147,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // Allocate device memory
+  // Allocate memory on device
   int *d_a, *d_b, *d_c;
   hipError_t err = hipMalloc((void **)&d_a, M * K * sizeof(int));
   if (err != hipSuccess) {
@@ -166,10 +166,9 @@ int main(int argc, char *argv[]) {
   }
 
   copyFromHostToDevice<int>(h_a, h_b, d_a, d_b, M, N, K);
-  // Execute kernel
   executeKernel<int>(d_a, d_b, d_c, M, N, K);
   copyFromDeviceToHost<int>(d_c, h_c, M, N);
-  //verifyResult<int>(h_a, h_b, h_c, M, N, K);
+  verifyResult<int>(h_a, h_b, h_c, M, N, K);
   deallocateMemory<int>(d_a, d_b, d_c);
   cleanUpDevice();
 

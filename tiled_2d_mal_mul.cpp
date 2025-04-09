@@ -198,7 +198,7 @@ int main(int argc, char *argv[]) {
   hipEventRecord(stop, 0);
   hipEventSynchronize(stop);
   hipEventElapsedTime(&time_ms, start, stop);
-  std::cout << "Time taken for GEMM: " << time_ms << " ms";
+  std::cout << "Time taken for GEMM: " << time_ms << " ms, ";
   hipEventDestroy(start);
   hipEventDestroy(stop);
   std::cout << "Performance: " << 2LL*M*N*K/(time_ms*1e-3*1e9) << " GFLOPS" << std::endl;

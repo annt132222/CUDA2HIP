@@ -253,7 +253,21 @@ int main(int argc, char *argv[]) {
   hipMalloc((void**)&d_c, M * N * sizeof(float));
 
   copyFromHostToDevice<float>(h_a, h_b, d_a, d_b, M, N, K);
+  hipEvent_t start, stop;
+  float time_ms;
+  hipEventCreate(&start);
+  hipEventCreate(&stop);
+  hipEventRecord(start, 0);
+
   executeKernel<float, 128, 128, 16, 8, 4, 64, 64, 4>(d_a, d_b, d_c, M, N, K);
+
+  hipEventRecord(stop, 0);
+  hipEventSynchronize(stop);
+  hipEventElapsedTime(&time_ms, start, stop);
+  std::cout << "Time taken for GEMM: " << time_ms << " ms";
+  hipEventDestroy(start);
+  hipEventDestroy(stop);
+  std::cout << "Performance: " << 2LL*M*N*K/(time_ms*1e-3*1e9) << " GFLOPS" << std::endl;
   copyFromDeviceToHost<float>(d_c, h_c, M, N);
   verifyResult<float>(h_a, h_b, h_c, M, N, K);
   deallocateMemory<float>(d_a, d_b, d_c);
